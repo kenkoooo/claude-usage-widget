@@ -1,0 +1,8 @@
+{
+    "uuid": "claude-usage@kenkoooo",
+    "name": "Claude Usage",
+    "description": "Shows Claude Code daily usage statistics in the top panel",
+    "version": 1,
+    "shell-version": ["45", "46", "47", "48", "49"],
+    "url": "https://github.com/kenkoooo/claude-usage-widget"
+}
