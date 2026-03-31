@@ -25,11 +25,13 @@ struct OAuthCreds {
     rest: serde_json::Value, // preserve all other fields
 }
 
-fn credentials_path() -> PathBuf {
+fn home_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
     PathBuf::from(home)
-        .join(".claude")
-        .join(".credentials.json")
+}
+
+fn credentials_path() -> PathBuf {
+    home_dir().join(".claude").join(".credentials.json")
 }
 
 fn now_millis() -> u64 {
@@ -37,6 +39,13 @@ fn now_millis() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 fn read_credentials() -> Result<Credentials, String> {
@@ -53,7 +62,7 @@ fn save_credentials(creds: &Credentials) -> Result<(), String> {
 
 struct CurlResponse {
     status: u16,
-    body: Vec<u8>,
+    body: String,
 }
 
 fn run_curl(args: &[&str]) -> Result<CurlResponse, String> {
@@ -90,13 +99,13 @@ fn run_curl(args: &[&str]) -> Result<CurlResponse, String> {
 
     Ok(CurlResponse {
         status,
-        body: body.as_bytes().to_vec(),
+        body: body.to_string(),
     })
 }
 
-fn format_http_error(prefix: &str, status: u16, body: &[u8]) -> String {
-    let fallback_body = String::from_utf8_lossy(body).trim().to_string();
-    let message = serde_json::from_slice::<serde_json::Value>(body)
+fn format_http_error(prefix: &str, status: u16, body: &str) -> String {
+    let fallback_body = body.trim().to_string();
+    let message = serde_json::from_str::<serde_json::Value>(body)
         .ok()
         .and_then(|json| {
             json.get("error")
@@ -169,7 +178,7 @@ fn refresh_token(refresh_token: &str) -> Result<OAuthTokens, String> {
     }
 
     let resp: RefreshResponse =
-        serde_json::from_slice(&response.body).map_err(|e| format!("refresh parse error: {e}"))?;
+        serde_json::from_str(&response.body).map_err(|e| format!("refresh parse error: {e}"))?;
 
     Ok(OAuthTokens {
         access_token: resp.access_token,
@@ -216,7 +225,7 @@ fn fetch_usage(token: &str) -> Result<UsageResponse, String> {
         ));
     }
 
-    serde_json::from_slice(&response.body).map_err(|e| format!("parse error: {e}"))
+    serde_json::from_str(&response.body).map_err(|e| format!("parse error: {e}"))
 }
 
 // ── Cache ──────────────────────────────────────────────────────────────────────
@@ -228,8 +237,7 @@ struct Cache {
 }
 
 fn cache_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    PathBuf::from(home)
+    home_dir()
         .join(".cache")
         .join("claude-usage-widget")
         .join("usage.json")
@@ -243,11 +251,7 @@ fn load_cache() -> Option<Cache> {
 }
 
 fn is_cache_fresh(cache: &Cache) -> bool {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    now.saturating_sub(cache.fetched_at) < CACHE_TTL_SECS
+    now_secs().saturating_sub(cache.fetched_at) < CACHE_TTL_SECS
 }
 
 fn save_cache(usage: &UsageResponse) {
@@ -255,12 +259,8 @@ fn save_cache(usage: &UsageResponse) {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
     let cache = Cache {
-        fetched_at: now,
+        fetched_at: now_secs(),
         usage: usage.clone(),
     };
     if let Ok(json) = serde_json::to_string(&cache) {
