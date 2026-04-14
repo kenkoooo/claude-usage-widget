@@ -357,9 +357,21 @@ fn main() {
                 .as_ref()
                 .map(|w| resets_in_dh(&w.resets_at))
                 .unwrap_or_else(|| "?".to_string());
+            let w7_elapsed_pct = usage
+                .seven_day
+                .as_ref()
+                .map(|w| {
+                    let dt = DateTime::parse_from_rfc3339(&w.resets_at)
+                        .map(|d| d.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now());
+                    let remaining_secs = (dt - Utc::now()).num_seconds().max(0) as f64;
+                    let week_secs = 7.0 * 24.0 * 3600.0;
+                    (1.0 - remaining_secs / week_secs) * 100.0
+                })
+                .unwrap_or(0.0);
 
             if panel_mode {
-                println!("{fh_pct:.0}%/{w7_pct:.0}% {w7_reset_dh}");
+                println!("{fh_pct:.0}%/{w7_pct:.0}%/{w7_elapsed_pct:.0}% {w7_reset_dh}");
             } else {
                 println!("Claude Code Usage");
                 println!(
